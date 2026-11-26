@@ -107,9 +107,10 @@ fn collect_manifests(root: &Path, dir: &Path, out: &mut Vec<Manifest>) {
     }
 }
 
-/// SMAPI tolerates JSON5-ish input; we try strict JSON, then a minimal cleanup
-/// (strip `//`/`/* */` comments and trailing commas) before giving up.
+/// SMAPI tolerates JSON5-ish input (UTF-8 BOM, comments, trailing commas with
+/// arbitrary whitespace/CRLF); strip those cleanly before parsing.
 fn parse_lenient(s: &str) -> Option<Value> {
+    let s = s.trim_start_matches('\u{feff}');
     if let Ok(v) = serde_json::from_str(s) {
         return Some(v);
     }
@@ -154,13 +155,44 @@ fn parse_lenient(s: &str) -> Option<Value> {
             _ => cleaned.push(c),
         }
     }
-    // strip trailing commas before } or ]
-    let no_trailing = cleaned
-        .replace(",\n}", "\n}")
-        .replace(",}", "}")
-        .replace(",\n]", "\n]")
-        .replace(",]", "]");
-    serde_json::from_str(&no_trailing).ok()
+    // Strip trailing commas before `}` or `]` across any whitespace/CRLF.
+    let mut out = String::with_capacity(cleaned.len());
+    let mut iter = cleaned.chars().peekable();
+    let mut in_str2 = false;
+    while let Some(c) = iter.next() {
+        if in_str2 {
+            out.push(c);
+            if c == '\\' {
+                if let Some(n) = iter.next() {
+                    out.push(n);
+                }
+            } else if c == '"' {
+                in_str2 = false;
+            }
+            continue;
+        }
+        if c == '"' {
+            in_str2 = true;
+            out.push(c);
+        } else if c == ',' {
+            let mut lookahead = iter.clone();
+            let mut trailing = false;
+            while let Some(&next_c) = lookahead.peek() {
+                if next_c.is_whitespace() {
+                    lookahead.next();
+                } else {
+                    trailing = next_c == '}' || next_c == ']';
+                    break;
+                }
+            }
+            if !trailing {
+                out.push(c);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    serde_json::from_str(&out).ok()
 }
 
 fn get_ci<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
