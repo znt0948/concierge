@@ -46,6 +46,9 @@ pub mod adapter {
         fn steam_app_id(&self) -> Option<u32> {
             Some(413_150)
         }
+        fn strip_single_top_dir(&self) -> bool {
+            false
+        }
         fn agent_guide(&self) -> Option<String> {
             Some(
                 "- **SMAPI is the loader — it comes first.** Stardew mods are SMAPI mods: a folder \

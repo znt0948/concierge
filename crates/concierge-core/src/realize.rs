@@ -89,7 +89,8 @@ pub fn resolve_layouts(repo: &Repo, plan: &Plan) -> Result<Vec<String>> {
         let Some(md5) = &m.md5 else { continue };
         let build = repo.build_path(md5);
         let hint = crate::layout::infer_layout(&build);
-        let need_subdir = hint.subdir.is_some() && m.subdir.is_none();
+        let strip_top = adapter.map_or(true, |a| a.strip_single_top_dir());
+        let need_subdir = strip_top && hint.subdir.is_some() && m.subdir.is_none();
         // Only INFER plugins into an empty list. A non-empty `plugins` is a
         // deliberate curation — e.g. one variant chosen from a FOMOD that ships
         // eleven mutually-exclusive .esps — and must not be clobbered by

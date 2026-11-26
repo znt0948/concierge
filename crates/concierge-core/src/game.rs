@@ -185,6 +185,13 @@ pub trait GameAdapter: Sync {
     fn promoted_tool_for(&self, _top_level: &[String]) -> Option<PromotedTool> {
         None
     }
+    /// Whether single-top-level-folder archives should have their wrapping
+    /// directory stripped during layout inference. True for Bethesda-style
+    /// `Data/` overlays; false for folder-per-mod games like Stardew Valley
+    /// (SMAPI), where each mod must keep its own folder under `Mods/`.
+    fn strip_single_top_dir(&self) -> bool {
+        true
+    }
     /// Game-specific guidance for the in-profile AI assistant — how THIS game is
     /// actually modded: the load model, the foundational tools this community
     /// expects, where mods live, and the common gotchas. Appended to the
