@@ -741,11 +741,15 @@ fn place(src: &Path, dst: &Path) -> Result<()> {
         std::fs::remove_file(dst).ctx(dst)?;
     }
     // Per-mod `config.json` files (e.g. SMAPI/Stardew mods) are rewritten by
-    // the game at startup; copy them writable instead of hardlinking from the
-    // read-only store so mods don't fail with EACCES and the store stays pure.
+    // the game at startup, and MonoGame/FNA audio loaders can fail with EACCES
+    // on read-only `.ogg`/`.wav` hardlinks; copy them writable instead of
+    // hardlinking from the read-only store so the store stays immutable.
     let copy_writable = dst
         .file_name()
-        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"));
+        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
+        || dst.extension().is_some_and(|ext| {
+            ext.eq_ignore_ascii_case("ogg") || ext.eq_ignore_ascii_case("wav")
+        });
     if copy_writable || std::fs::hard_link(src, dst).is_err() {
         std::fs::copy(src, dst).ctx(dst)?;
         if copy_writable {

@@ -23,6 +23,117 @@ pub fn validate(plan: &Plan) -> Result<Vec<Violation>> {
     Ok(check_mods_dir(&mods))
 }
 
+/// Per-mod i18n coverage entry for a target language (e.g. `zh`).
+#[derive(Debug, Clone)]
+pub struct I18nEntry {
+    pub mod_dir: String,
+    pub total_keys: usize,
+    pub missing_keys: usize,
+    pub has_lang_file: bool,
+}
+
+/// Summary of SMAPI `i18n/default.json` vs `i18n/<lang>.json` coverage.
+#[derive(Debug, Default, Clone)]
+pub struct I18nReport {
+    pub lang: String,
+    pub full: usize,
+    pub partial: Vec<I18nEntry>,
+    pub missing: Vec<I18nEntry>,
+}
+
+/// Scan the deployed `Mods/` directory for SMAPI `i18n/default.json` files and
+/// compare keys against `i18n/<lang>.json` (case-insensitive keys, lenient JSON5).
+pub fn i18n_report(plan: &Plan, lang: &str) -> Result<I18nReport> {
+    let mods = concierge::realize::target_root(plan, "mods")?;
+    Ok(scan_i18n_dir(&mods, lang))
+}
+
+fn scan_i18n_dir(mods: &Path, lang: &str) -> I18nReport {
+    let mut report = I18nReport {
+        lang: lang.to_owned(),
+        ..Default::default()
+    };
+    let mut i18n_dirs = Vec::new();
+    collect_i18n_dirs(mods, &mut i18n_dirs);
+    i18n_dirs.sort();
+    let lang_file_name = format!("{lang}.json");
+
+    for dir in i18n_dirs {
+        let default_path = dir.join("default.json");
+        let Some(default_val) = std::fs::read_to_string(&default_path)
+            .ok()
+            .and_then(|s| parse_lenient(&s))
+        else {
+            continue;
+        };
+        let Some(def_obj) = default_val.as_object() else {
+            continue;
+        };
+        if def_obj.is_empty() {
+            continue;
+        }
+        let mod_dir = dir
+            .parent()
+            .and_then(|p| p.strip_prefix(mods).ok())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "<mod>".to_owned());
+
+        let lang_path = dir.join(&lang_file_name);
+        if !lang_path.is_file() {
+            report.missing.push(I18nEntry {
+                mod_dir,
+                total_keys: def_obj.len(),
+                missing_keys: def_obj.len(),
+                has_lang_file: false,
+            });
+            continue;
+        }
+        let lang_keys: std::collections::HashSet<String> = std::fs::read_to_string(&lang_path)
+            .ok()
+            .and_then(|s| parse_lenient(&s))
+            .and_then(|v| v.as_object().cloned())
+            .map(|obj| obj.keys().map(|k| k.to_ascii_lowercase()).collect())
+            .unwrap_or_default();
+        let missing_keys = def_obj
+            .keys()
+            .filter(|k| !lang_keys.contains(&k.to_ascii_lowercase()))
+            .count();
+        if missing_keys == 0 {
+            report.full += 1;
+        } else {
+            report.partial.push(I18nEntry {
+                mod_dir,
+                total_keys: def_obj.len(),
+                missing_keys,
+                has_lang_file: true,
+            });
+        }
+    }
+    report.missing.sort_by(|a, b| b.total_keys.cmp(&a.total_keys));
+    report.partial.sort_by(|a, b| b.missing_keys.cmp(&a.missing_keys));
+    report
+}
+
+fn collect_i18n_dirs(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if path
+                .file_name()
+                .is_some_and(|n| n.eq_ignore_ascii_case("i18n"))
+                && path.join("default.json").is_file()
+            {
+                out.push(path);
+            } else {
+                collect_i18n_dirs(&path, out);
+            }
+        }
+    }
+}
+
 struct Manifest {
     subject: String,
     unique_id: Option<String>,

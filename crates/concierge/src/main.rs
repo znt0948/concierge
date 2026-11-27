@@ -115,6 +115,12 @@ enum Cmd {
     /// One health report: pins, invariant lints, inert plugins, empty dirs,
     /// drift, and pristine-safety — pass/fail per check (nonzero exit on fail)
     Doctor,
+    /// Check SMAPI mod i18n translation coverage (default.json vs <lang>.json)
+    I18n {
+        /// Target language code (e.g. zh, ja, ko)
+        #[arg(long, default_value = "zh")]
+        lang: String,
+    },
     /// Make profile folders agent-ready (CLAUDE.md guide + slash-commands +
     /// permissions allowlist), only writing what's absent. With --all,
     /// provisions every games/*/profiles/* under the workspace.
@@ -911,6 +917,33 @@ fn run() -> Result<()> {
                     "\n  {n} activation entr(ies) across {} mod(s)",
                     plan.mods.len()
                 );
+            }
+        }
+        Cmd::I18n { lang } => {
+            if plan.game.kind != "stardew" {
+                println!("i18n check is currently supported for stardew (SMAPI) profiles.");
+            } else {
+                let rep = concierge_lint::stardew::i18n_report(&plan, &lang)?;
+                println!(
+                    "i18n ({}): {} full, {} partial (missing keys), {} missing {}.json",
+                    rep.lang,
+                    rep.full,
+                    rep.partial.len(),
+                    rep.missing.len(),
+                    rep.lang
+                );
+                if !rep.partial.is_empty() {
+                    println!("\nPartial ({}.json missing keys):", rep.lang);
+                    for e in &rep.partial {
+                        println!("  {} — missing {}/{} keys", e.mod_dir, e.missing_keys, e.total_keys);
+                    }
+                }
+                if !rep.missing.is_empty() {
+                    println!("\nMissing ({}.json absent):", rep.lang);
+                    for e in &rep.missing {
+                        println!("  {} — {} keys", e.mod_dir, e.total_keys);
+                    }
+                }
             }
         }
         Cmd::Doctor => {
