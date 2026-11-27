@@ -740,8 +740,22 @@ fn place(src: &Path, dst: &Path) -> Result<()> {
     if dst.exists() {
         std::fs::remove_file(dst).ctx(dst)?;
     }
-    if std::fs::hard_link(src, dst).is_err() {
+    // Per-mod `config.json` files (e.g. SMAPI/Stardew mods) are rewritten by
+    // the game at startup; copy them writable instead of hardlinking from the
+    // read-only store so mods don't fail with EACCES and the store stays pure.
+    let copy_writable = dst
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"));
+    if copy_writable || std::fs::hard_link(src, dst).is_err() {
         std::fs::copy(src, dst).ctx(dst)?;
+        if copy_writable {
+            if let Ok(meta) = std::fs::metadata(dst) {
+                let mut perm = meta.permissions();
+                #[allow(clippy::permissions_set_readonly_false)]
+                perm.set_readonly(false);
+                let _ = std::fs::set_permissions(dst, perm);
+            }
+        }
     }
     Ok(())
 }
