@@ -20,7 +20,7 @@ mod bg3;
 mod kotor;
 mod minecraft;
 mod rimworld;
-mod stardew;
+pub mod stardew;
 mod valheim;
 
 /// Run the validators for `plan`'s game: the adapter's own lints, plus this
