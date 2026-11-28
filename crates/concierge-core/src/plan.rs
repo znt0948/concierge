@@ -18,7 +18,6 @@ use crate::runtime::{detect, Runtime};
 
 pub const PLAN_SCHEMA: u32 = 2;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Normalize a mod `prefix` and refuse anything that could escape the install
 /// root. Returns a trailing-slash form (`A/b/`) so callers can concatenate.
 fn validate_prefix(raw: &str) -> Result<String> {
@@ -40,6 +39,7 @@ fn validate_prefix(raw: &str) -> Result<String> {
     Ok(format!("{normalized}/"))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plan {
     pub schema: u32,
     pub game: GamePlan,
