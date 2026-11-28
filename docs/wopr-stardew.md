@@ -183,13 +183,32 @@ A mod update can change that layout (a Nexus zip that roots the mod at
 `Trolley Expansion/` while the imported copy and its translation used `[CP] TE`),
 and then the overlay files land outside any mod folder. SMAPI reports them as
 "contains files, but none of them are manifest.json" - they are **not** junk;
-deleting them drops the translation. Fix by repackaging the translation archive
-with the new prefix, repinning its `md5` in `manifest.toml`, then `realize`:
+deleting them drops the translation.
 
-- 2026-11-28 example: `[CP] TE/*` -> `Trolley Expansion/[CP] TE/*`
-  (`Trolley_translation_prefixed.zip`, md5 `9a43964e...`) and
-  `Lots of Kisses/*` -> `LotsOfKisses/*`
-  (`LotsOfKisses_translation_prefixed.zip`, md5 `35fd93a2...`).
+Since `v0.12.1-wopr.7`, a mod can declare where its files go instead of
+repackaging the archive:
+
+```toml
+[mod.config]
+# optional: archive folder treated as the install root (strips a wrapper)
+subdir = "[CP] Aquatic Sea Fish/Aquatic Sea Fish"
+# optional: destination prefix inside the install root (always ends in "/")
+prefix = "[CP] Aquatic Sea Fish/"
+```
+
+`subdir` picks what to take, `prefix` says where to put it. `prefix` is
+validated at eval time (no absolute paths, no `.`/`..`). The destination must
+match the installed mod folder **exactly**, including spaces vs hyphens -
+`[CP] Canon Friendly Dialogue Expansion` is not
+`[CP] Canon-Friendly Dialogue Expansion`.
+
+- 2026-11-28 examples: Aquatic Sea Fish translation (Nexus 49544) uses
+  `subdir` + `prefix`; Canon-Friendly Dialogue Expansion translation (Nexus
+  54094) ships a bare `zh.json` and uses
+  `prefix = "[CP] Canon Friendly Dialogue Expansion/i18n/"`.
+- Older repair (before `prefix` existed): repackage the archive with the new
+  prefix, repin `md5`, then `realize`. Trolley `[CP] TE/*` ->
+  `Trolley Expansion/[CP] TE/*` and `Lots of Kisses/*` -> `LotsOfKisses/*`.
 - Before rewriting a pack that carries `Data/*.json`, verify its JSON key
   structure matches the installed mod (a stale translation would delete newer
   content). `i18n --lang zh` then confirms the keys are found.
