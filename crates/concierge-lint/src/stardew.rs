@@ -509,12 +509,14 @@ mod tests {
         assert_eq!(rep.partial.len(), 0);
         assert_eq!(rep.suspicious.len(), 1);
         assert_eq!(
-            rep.suspicious[0].same_as_default, 1,
+            rep.suspicious.first().map(|e| e.same_as_default),
+            Some(1),
             "only the real prose value counts; numbers/placeholders are expected"
         );
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    #[test]
     fn tolerates_json5_comments_and_trailing_commas() {
         let j = "{\n// a comment\n\"Name\":\"X\",\n\"Version\":\"1.0\",\n\"UniqueID\":\"a.b\",\n\"EntryDll\":\"X.dll\",\n}";
         assert!(parse_lenient(j).is_some());
