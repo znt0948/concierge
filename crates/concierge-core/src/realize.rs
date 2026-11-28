@@ -89,7 +89,7 @@ pub fn resolve_layouts(repo: &Repo, plan: &Plan) -> Result<Vec<String>> {
         let Some(md5) = &m.md5 else { continue };
         let build = repo.build_path(md5);
         let hint = crate::layout::infer_layout(&build);
-        let strip_top = adapter.map_or(true, |a| a.strip_single_top_dir());
+        let strip_top = adapter.is_none_or(super::game::GameAdapter::strip_single_top_dir);
         let need_subdir = strip_top && hint.subdir.is_some() && m.subdir.is_none();
         // Only INFER plugins into an empty list. A non-empty `plugins` is a
         // deliberate curation — e.g. one variant chosen from a FOMOD that ships
@@ -740,15 +740,13 @@ pub fn mod_fomod_config(
 fn needs_writable_copy(dst: &Path) -> bool {
     dst.file_name()
         .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
-        || dst.extension().is_some_and(|ext| {
-            ext.eq_ignore_ascii_case("ogg") || ext.eq_ignore_ascii_case("wav")
-        })
+        || dst
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("ogg") || ext.eq_ignore_ascii_case("wav"))
 }
 
 fn is_read_only(path: &Path) -> bool {
-    std::fs::metadata(path)
-        .map(|m| m.permissions().readonly())
-        .unwrap_or(true)
+    std::fs::metadata(path).map_or(true, |m| m.permissions().readonly())
 }
 
 /// Whether the deployed file already has the shape [`place`] would give it: an
@@ -1077,10 +1075,7 @@ mod tests {
             !std::fs::metadata(&dst).unwrap().permissions().readonly(),
             "deployed audio is writable"
         );
-        assert!(
-            placement_matches(&src, &dst, true),
-            "writable copy accepted"
-        );
+        assert!(placement_matches(&src, &dst, true), "writable copy accepted");
 
         // A 0444 hardlink (what older versions deployed) is not acceptable for
         // these files, even though it is the right shape for ordinary ones.
@@ -1099,7 +1094,9 @@ mod tests {
         assert!(needs_writable_copy(std::path::Path::new("/x/a.ogg")));
         assert!(needs_writable_copy(std::path::Path::new("/x/a.WAV")));
         assert!(!needs_writable_copy(std::path::Path::new("/x/a.xnb")));
-        assert!(!needs_writable_copy(std::path::Path::new("/x/config.json.bak")));
+        assert!(!needs_writable_copy(std::path::Path::new(
+            "/x/config.json.bak"
+        )));
     }
 
     #[test]

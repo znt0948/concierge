@@ -935,7 +935,10 @@ fn run() -> Result<()> {
                 if !rep.partial.is_empty() {
                     println!("\nPartial ({}.json missing keys):", rep.lang);
                     for e in &rep.partial {
-                        println!("  {} — missing {}/{} keys", e.mod_dir, e.missing_keys, e.total_keys);
+                        println!(
+                            "  {} — missing {}/{} keys",
+                            e.mod_dir, e.missing_keys, e.total_keys
+                        );
                     }
                 }
                 if !rep.missing.is_empty() {

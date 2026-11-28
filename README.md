@@ -143,6 +143,18 @@ purpose.
   sort, and roll back, while each game crate carries that game's real
   conventions. Being opinionated per community beats being uniformly wrong.
 
+## Fork notes (WOPR / Steam Deck, Stardew Valley)
+
+This repository is a fork used to run Stardew Valley on a Steam Deck. It carries
+a small set of patches that make an imported Fluorine/MO2 profile playable and
+scriptable: SMAPI folder layout preserved on import, BOM/CRLF-tolerant manifest
+linting, writable `config.json`/audio deployment, a translation-coverage report
+(`concierge-cli i18n`), and helper scripts to import a Fluorine profile and to
+update mods from SMAPI's update alerts. See
+[docs/wopr-stardew.md](docs/wopr-stardew.md) for the operating manual, paths on
+the Deck, and rollback steps. Release tags are pre-release
+`v0.12.1-wopr.N` builds; upstream release tags are unchanged.
+
 ## Contributing
 
 Bug reports and feature requests: [issues](https://github.com/msmfai/concierge/issues).
