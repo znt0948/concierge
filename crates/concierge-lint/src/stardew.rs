@@ -30,6 +30,10 @@ pub struct I18nEntry {
     pub total_keys: usize,
     pub missing_keys: usize,
     pub has_lang_file: bool,
+    /// Keys whose `<lang>.json` value is byte-identical to `default.json`.
+    /// A key that exists but still carries the English text is the common
+    /// "translated file, untranslated line" case - suspicious, not missing.
+    pub same_as_default: usize,
 }
 
 /// Summary of SMAPI `i18n/default.json` vs `i18n/<lang>.json` coverage.
@@ -39,6 +43,8 @@ pub struct I18nReport {
     pub full: usize,
     pub partial: Vec<I18nEntry>,
     pub missing: Vec<I18nEntry>,
+    /// Entries with at least one value identical to the default text.
+    pub suspicious: Vec<I18nEntry>,
 }
 
 /// Scan the deployed `Mods/` directory for SMAPI `i18n/default.json` files and
@@ -84,28 +90,51 @@ fn scan_i18n_dir(mods: &Path, lang: &str) -> I18nReport {
                 total_keys: def_obj.len(),
                 missing_keys: def_obj.len(),
                 has_lang_file: false,
+                same_as_default: 0,
             });
             continue;
         }
-        let lang_keys: std::collections::HashSet<String> = std::fs::read_to_string(&lang_path)
-            .ok()
-            .and_then(|s| parse_lenient(&s))
-            .and_then(|v| v.as_object().cloned())
-            .map(|obj| obj.keys().map(|k| k.to_ascii_lowercase()).collect())
-            .unwrap_or_default();
-        let missing_keys = def_obj
-            .keys()
-            .filter(|k| !lang_keys.contains(&k.to_ascii_lowercase()))
-            .count();
+        // Case-insensitive key map, so a mod that changed key casing between
+        // versions is still matched.
+        let lang_map: std::collections::HashMap<String, serde_json::Value> =
+            std::fs::read_to_string(&lang_path)
+                .ok()
+                .and_then(|s| parse_lenient(&s))
+                .and_then(|v| v.as_object().cloned())
+                .map(|obj| {
+                    obj.into_iter()
+                        .map(|(k, v)| (k.to_ascii_lowercase(), v))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+        let mut missing_keys = 0usize;
+        let mut same_as_default = 0usize;
+        for (key, default_value) in def_obj {
+            match lang_map.get(&key.to_ascii_lowercase()) {
+                None => missing_keys += 1,
+                Some(lang_value) => {
+                    if lang_value == default_value && is_translatable(default_value) {
+                        same_as_default += 1;
+                    }
+                }
+            }
+        }
+
+        let entry = I18nEntry {
+            mod_dir,
+            total_keys: def_obj.len(),
+            missing_keys,
+            has_lang_file: true,
+            same_as_default,
+        };
         if missing_keys == 0 {
             report.full += 1;
         } else {
-            report.partial.push(I18nEntry {
-                mod_dir,
-                total_keys: def_obj.len(),
-                missing_keys,
-                has_lang_file: true,
-            });
+            report.partial.push(entry.clone());
+        }
+        if same_as_default > 0 {
+            report.suspicious.push(entry);
         }
     }
     report
@@ -115,6 +144,17 @@ fn scan_i18n_dir(mods: &Path, lang: &str) -> I18nReport {
         .partial
         .sort_by_key(|b| std::cmp::Reverse(b.missing_keys));
     report
+        .suspicious
+        .sort_by_key(|b| std::cmp::Reverse(b.same_as_default));
+    report
+}
+
+/// Only real prose can be "not translated yet". A value without letters (a
+/// number, `%s`, `^`, a bare token) is legitimately identical in both files.
+fn is_translatable(value: &serde_json::Value) -> bool {
+    value
+        .as_str()
+        .is_some_and(|s| s.chars().any(|c| c.is_ascii_alphabetic()))
 }
 
 fn collect_i18n_dirs(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
@@ -447,6 +487,34 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn i18n_flags_values_identical_to_default_but_ignores_non_prose() {
+        let base = std::env::temp_dir().join(format!("cg-i18n-same-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let i18n = base.join("TestMod/i18n");
+        std::fs::create_dir_all(&i18n).unwrap();
+        std::fs::write(
+            i18n.join("default.json"),
+            r#"{"a":"Hello","b":"World","n":"5","p":"^"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            i18n.join("zh.json"),
+            r#"{"a":"你好","b":"World","n":"5","p":"^"}"#,
+        )
+        .unwrap();
+
+        let rep = scan_i18n_dir(&base, "zh");
+        assert_eq!(rep.full, 1);
+        assert_eq!(rep.partial.len(), 0);
+        assert_eq!(rep.suspicious.len(), 1);
+        assert_eq!(
+            rep.suspicious[0].same_as_default, 1,
+            "only the real prose value counts; numbers/placeholders are expected"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     fn tolerates_json5_comments_and_trailing_commas() {
         let j = "{\n// a comment\n\"Name\":\"X\",\n\"Version\":\"1.0\",\n\"UniqueID\":\"a.b\",\n\"EntryDll\":\"X.dll\",\n}";
         assert!(parse_lenient(j).is_some());

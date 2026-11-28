@@ -119,9 +119,19 @@ rollback.
 $CONCIERGE i18n --lang zh
 ```
 
-Reports `N full, M partial, K missing zh.json`, then per-mod detail sorted by
-missing keys. Coverage is key-based: a value that is still English but keeps
-its key counts as translated. Mods that ship translations as a separate mod
+Reports `N full, M partial (missing keys), K missing zh.json`, then per-mod
+detail sorted by missing keys. A second pass reports `suspicious`: mods whose
+`<lang>.json` contains values byte-identical to `default.json` - the "copied the
+file, translated only part of it" case. Values without letters (numbers, `%s`,
+`^`, bare tokens) are ignored, since those are legitimately identical.
+
+```sh
+i18n (zh): 50 full, 20 partial (missing keys), 41 missing zh.json
+  suspicious: 3 mod(s) with values identical to default
+...
+Suspicious (value identical to default.json - likely untranslated):
+  Some Mod — 12/321 values identical
+``` Mods that ship translations as a separate mod
 (`[CP] ... Chinese Translation`) show up as `missing` here even though the game
 is localized.
 

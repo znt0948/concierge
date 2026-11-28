@@ -930,6 +930,10 @@ fn run() -> Result<()> {
                     rep.missing.len(),
                     rep.lang
                 );
+                println!(
+                    "  suspicious: {} mod(s) with values identical to default",
+                    rep.suspicious.len()
+                );
                 if !rep.partial.is_empty() {
                     println!("\nPartial ({}.json missing keys):", rep.lang);
                     for e in &rep.partial {
@@ -943,6 +947,20 @@ fn run() -> Result<()> {
                     println!("\nMissing ({}.json absent):", rep.lang);
                     for e in &rep.missing {
                         println!("  {} — {} keys", e.mod_dir, e.total_keys);
+                    }
+                }
+                if !rep.suspicious.is_empty() {
+                    println!(
+                        "\nSuspicious (value identical to default.json - likely untranslated):"
+                    );
+                    for e in rep.suspicious.iter().take(20) {
+                        println!(
+                            "  {} — {}/{} values identical",
+                            e.mod_dir, e.same_as_default, e.total_keys
+                        );
+                    }
+                    if rep.suspicious.len() > 20 {
+                        println!("  ... and {} more", rep.suspicious.len() - 20);
                     }
                 }
             } else {
