@@ -7,6 +7,11 @@ upstream behaviour unless noted.
 
 Everything below is the state of the reference machine (`wopr`, `deck` user).
 
+**Status (2026-11-28):** live. `concierge-cli v0.12.1-wopr.5` is installed, the
+profile is realized (197 mods, `doctor` clear), native Steam AppID `413150`
+launches the instance, and the temporary non-Steam test shortcut has been
+removed. The Fluorine/MO2 instance is untouched and remains the rollback path.
+
 ## What the fork changes
 
 | Change | Why it is needed |
@@ -146,14 +151,15 @@ cd /home/deck/concierge-test/stardew-full-instance
 exec ./StardewModdingAPI "$@"
 ```
 
-and `LaunchOptions` for `413150` becomes:
+and `LaunchOptions` for `413150` is:
 
 ```
 bash /home/deck/.local/bin/concierge-stardew %command%
 ```
 
-The previous value (the Fluorine `moshortcut://` launcher) is backed up before
-the edit. Changing launch options requires Steam to be closed, so it is done in
+The previous value (`bash /home/deck/.local/share/applications/stardew-Stardew-Valley.sh %command%`,
+the Fluorine `moshortcut://` launcher) is backed up to
+`Agent/backups/steam-shortcuts/<UTC>-concierge-native-entry/` before the edit. Changing launch options requires Steam to be closed, so it is done in
 Desktop Mode or with Steam stopped; `%command%` is ignored by the wrapper, but
 Steam still sets `SteamAppId`/`SteamClientLaunch`, which is what Cloud and the
 SMAPI Steam integration need. Do not export `SteamAppId` inside the wrapper —
