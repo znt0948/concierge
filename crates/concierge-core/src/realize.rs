@@ -1075,7 +1075,10 @@ mod tests {
             !std::fs::metadata(&dst).unwrap().permissions().readonly(),
             "deployed audio is writable"
         );
-        assert!(placement_matches(&src, &dst, true), "writable copy accepted");
+        assert!(
+            placement_matches(&src, &dst, true),
+            "writable copy accepted"
+        );
 
         // A 0444 hardlink (what older versions deployed) is not acceptable for
         // these files, even though it is the right shape for ordinary ones.
