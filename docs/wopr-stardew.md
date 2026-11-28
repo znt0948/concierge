@@ -149,18 +149,24 @@ Steam Cloud and the Steam overlay only work for the real app id, not for an
 invented non-Steam shortcut.
 
 Concierge's instance is started by a wrapper that Steam runs through the app's
-launch options:
+launch options. **The wrapper must execute Steam's launch chain**, not SMAPI
+directly:
 
 ```sh
 # /home/deck/.local/bin/concierge-stardew
 #!/usr/bin/env bash
 set -euo pipefail
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
-cd /home/deck/concierge-test/stardew-full-instance
-# Steam substitutes %command% with its runtime launch chain; SMAPI must not
-# receive those words as arguments.
-exec ./StardewModdingAPI
+INSTANCE=/home/deck/concierge-test/stardew-full-instance
+PRISTINE_PAYLOAD="/home/deck/.local/share/Steam/steamapps/common/Stardew Valley/StardewValley"
+
+args=("$@")
+for i in "${!args[@]}"; do
+  case "${args[$i]}" in
+    "$PRISTINE_PAYLOAD"|*/"steamapps/common/Stardew Valley/StardewValley")
+      args[$i]="$INSTANCE/StardewValley" ;;
+  esac
+done
+exec "${args[@]}"
 ```
 
 and `LaunchOptions` for `413150` is:
@@ -169,14 +175,24 @@ and `LaunchOptions` for `413150` is:
 bash /home/deck/.local/bin/concierge-stardew %command%
 ```
 
+Steam substitutes `%command%` with
+`steam-launch-wrapper ... reaper SteamLaunch AppId=413150 -- SteamLinuxRuntime_soldier/... -- <game>/StardewValley`.
+That chain has to run: the **reaper** is what tells the Steam client the game
+started, and Gaming Mode keeps its "launching" spinner overlay on top of the
+game until it does. Executing `./StardewModdingAPI` from the wrapper instead
+(the pre-2026-11-28 wrapper) still runs the game - the SMAPI log reaches the
+title screen - but in Gaming Mode the screen stays on the spinning Steam logo
+and the game is invisible behind it. Desktop Mode shows the window normally,
+which makes this look like "it works" when testing over SSH.
+
+The instance's `StardewValley` is SMAPI's launcher script, so the rewritten
+payload still starts SMAPI (and now under the Steam runtime, with the overlay).
+The old direct-exec wrapper is kept as
+`/home/deck/.local/bin/concierge-stardew.bak-direct-exec` for reference only.
+
 The previous value (`bash /home/deck/.local/share/applications/stardew-Stardew-Valley.sh %command%`,
 the Fluorine `moshortcut://` launcher) is backed up to
-`Agent/backups/steam-shortcuts/<UTC>-concierge-native-entry/` before the edit. Changing launch options requires Steam to be closed, so it is done in
-Desktop Mode or with Steam stopped; `%command%` is ignored by the wrapper, but
-Steam still sets `SteamAppId`/`SteamClientLaunch`, which is what Cloud and the
-SMAPI Steam integration need. Do not export `SteamAppId` inside the wrapper —
-the Steam-launched environment already has it, and overriding it with the wrong
-value made Steam's process tracking hang on exit.
+`Agent/backups/steam-shortcuts/<UTC>-concierge-native-entry/` before the edit.
 
 Rollback: restore the backed-up launch options, restart Steam, verify the
 Fluorine launcher still opens.
@@ -231,6 +247,7 @@ match the installed mod folder **exactly**, including spaces vs hyphens -
 | `Access to the path '.../config.json' is denied` | A 0444 store hardlink from an older deploy. | Run `realize` (this fork re-places writable copies); verify `stat -c %a` is not 444. |
 | `Error loading sound: ... is denied` | Same, for `.ogg`/`.wav`. | Same. |
 | `unparseable-manifest` for many mods | BOM/CRLF manifests, fixed in this fork's linter. | Rebuild with a current `v0.12.1-wopr.*` binary. |
+| Gaming Mode shows the spinning Steam logo while `SMAPI-latest.txt` shows a normal load | The wrapper executed SMAPI directly, so Steam's reaper never reported the launch. | Re-exec Steam's `%command%` chain with the payload rewritten to the instance (see "Launching through Steam"). |
 | Game exits slowly / Steam hangs in "running" | Wrapper exported a `SteamAppId` that does not match the launching entry. | Remove the export; let Steam provide the environment. |
 | `doctor` reports `no drift` FAIL after playing | The game wrote `config.json` files (SMAPI saves settings). | Since `v0.12.1-wopr.6` runtime-mutable `config.json` is excluded from drift; other modifications are still reported. Saves live in `~/.config/StardewValley`, not the instance. |
 
