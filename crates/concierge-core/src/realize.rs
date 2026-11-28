@@ -562,6 +562,7 @@ fn plain_desired(want: &mut WantSet, build: &Path, m: &crate::plan::PlannedMod) 
         if m.exclude.iter().any(|ex| rel.starts_with(ex.as_str())) {
             continue;
         }
+        let rel = with_prefix(m, &rel);
         want.insert(
             key(&m.install_root, &rel),
             (entry.path().to_path_buf(), m.name.clone()),
@@ -620,7 +621,7 @@ fn fomod_desired(want: &mut WantSet, build: &Path, m: &crate::plan::PlannedMod) 
                     .map_err(|e| Error::Other(e.to_string()))?
                     .to_string_lossy()
                     .replace('\\', "/");
-                let dest = join_rel(&item.destination, &sub);
+                let dest = with_prefix(m, &join_rel(&item.destination, &sub));
                 want.insert(
                     key(&m.install_root, &dest),
                     (entry.path().to_path_buf(), m.name.clone()),
@@ -628,12 +629,22 @@ fn fomod_desired(want: &mut WantSet, build: &Path, m: &crate::plan::PlannedMod) 
             }
         } else {
             want.insert(
-                key(&m.install_root, &item.destination),
+                key(&m.install_root, &with_prefix(m, &item.destination)),
                 (src, m.name.clone()),
             );
         }
     }
     Ok(())
+}
+
+/// Put a deployed path under the mod's `prefix` (translation overlays that must
+/// land inside another mod's folder). The prefix is validated at plan time and
+/// always ends with `/`.
+fn with_prefix(m: &crate::plan::PlannedMod, rel: &str) -> String {
+    match &m.prefix {
+        Some(p) => format!("{p}{rel}"),
+        None => rel.to_owned(),
+    }
 }
 
 /// `dest` joined with a folder-relative `sub` (either may be empty).

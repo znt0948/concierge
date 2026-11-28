@@ -42,6 +42,11 @@ enabled = true
   install_root = "data"
   provides = ["SkyUI_SE.esp"]        # the plugins this mod contributes
   options = { fontsize = "large" }   # per-mod options (INI/FOMOD choices)
+  # subdir  = "..."                  # archive folder treated as the install root
+  # prefix  = "..."                  # destination prefix inside the install root
+  #                                  # (translation overlays: take the pack's
+  #                                  #  files and drop them into another mod's
+  #                                  #  folder, e.g. "[CP] Some Mod/i18n/")
 
 [[mod]]
 name = "AWKCR Patch"

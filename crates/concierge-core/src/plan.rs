@@ -19,6 +19,27 @@ use crate::runtime::{detect, Runtime};
 pub const PLAN_SCHEMA: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Normalize a mod `prefix` and refuse anything that could escape the install
+/// root. Returns a trailing-slash form (`A/b/`) so callers can concatenate.
+fn validate_prefix(raw: &str) -> Result<String> {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() || trimmed.starts_with('/') || trimmed.starts_with('\\') {
+        return Err(crate::error::Error::Manifest(format!(
+            "mod prefix must be a non-empty relative path: {raw}"
+        )));
+    }
+    let normalized = trimmed.replace('\\', "/");
+    if normalized
+        .split('/')
+        .any(|c| c.is_empty() || c == "." || c == "..")
+    {
+        return Err(crate::error::Error::Manifest(format!(
+            "mod prefix must not contain empty, '.' or '..' segments: {raw}"
+        )));
+    }
+    Ok(format!("{normalized}/"))
+}
+
 pub struct Plan {
     pub schema: u32,
     pub game: GamePlan,
@@ -122,6 +143,9 @@ pub struct PlannedMod {
     /// Named root from `root_targets`.
     pub install_root: String,
     pub subdir: Option<String>,
+    /// Destination prefix inside the install root (`None` = the mod's own tree).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
     /// Additional archive subdirs to install ON TOP of `subdir`, each stripped
     /// to the install root the same way — the file side of a selected FOMOD
     /// `[[mod.config.choice.option]]` (its `subdir`). Lets a mod merge a core
@@ -241,6 +265,7 @@ pub fn eval(manifest: &Manifest) -> Result<Plan> {
             xxhash: (!md.xxhash.is_empty()).then(|| md.xxhash.clone()),
             install_root,
             subdir: md.subdir.clone(),
+            prefix: md.prefix.as_deref().map(validate_prefix).transpose()?,
             fomod: md.fomod.as_ref().map(|f| f.select.clone()),
             exclude: md.exclude.clone(),
             plugins: md.plugins.clone(),
@@ -384,5 +409,25 @@ impl Plan {
     /// when one is declared, else the pristine install (in-place mode).
     pub fn game_dir(&self) -> &str {
         self.game.instance.as_deref().unwrap_or(&self.game.pristine)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests {
+    use super::validate_prefix;
+
+    #[test]
+    fn prefix_is_normalized_with_trailing_slash() {
+        assert_eq!(validate_prefix("A/b").unwrap(), "A/b/");
+        assert_eq!(validate_prefix("A/b/").unwrap(), "A/b/");
+        assert_eq!(validate_prefix(" A\\b ").unwrap(), "A/b/");
+    }
+
+    #[test]
+    fn prefix_rejects_escapes_and_empty_segments() {
+        for bad in ["", "/", "/abs", "a/../b", "a/./b", "a//b", "..", "."] {
+            assert!(validate_prefix(bad).is_err(), "accepted {bad:?}");
+        }
     }
 }

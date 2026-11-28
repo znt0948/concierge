@@ -357,6 +357,12 @@ pub struct Mod {
     /// Path inside the archive treated as the install root.
     #[serde(default)]
     pub subdir: Option<String>,
+    /// Destination prefix inside the install root. Translation overlays often
+    /// ship their own wrapper folder (or bare files) instead of the target
+    /// mod's path: `subdir` selects what to take, `prefix` says where to put
+    /// it (e.g. `[CP] Some Mod/i18n/`). Must be relative and free of `..`.
+    #[serde(default)]
+    pub prefix: Option<String>,
     /// Activation entries, in order (Bethesda: plugin filenames; bg3:
     /// `uuid|Name`; rimworld: package ids; unused by config-less games).
     #[serde(default)]
@@ -406,6 +412,9 @@ pub struct ModConfig {
     pub install_root: Option<String>,
     #[serde(default)]
     pub subdir: Option<String>,
+    /// Destination prefix inside the install root (see `Mod::prefix`).
+    #[serde(default)]
+    pub prefix: Option<String>,
     /// Activation entries this mod provides, in order (a.k.a. `plugins`).
     #[serde(default)]
     pub provides: Vec<String>,
@@ -616,6 +625,9 @@ impl Manifest {
                 }
                 if c.subdir.is_some() {
                     md.subdir = c.subdir;
+                }
+                if c.prefix.is_some() {
+                    md.prefix = c.prefix;
                 }
                 if !c.provides.is_empty() {
                     md.plugins = c.provides;
