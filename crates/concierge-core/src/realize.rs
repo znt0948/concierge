@@ -733,6 +733,41 @@ pub fn mod_fomod_config(
     Ok(Some(cfg))
 }
 
+/// Files that must be deployed as a writable copy rather than a hardlink into
+/// the read-only store: per-mod `config.json` (SMAPI/Stardew mods rewrite it at
+/// startup) and `.ogg`/`.wav` (MonoGame/FNA's audio loader opens them
+/// read-write and fails with EACCES on a 0444 hardlink).
+fn needs_writable_copy(dst: &Path) -> bool {
+    dst.file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
+        || dst.extension().is_some_and(|ext| {
+            ext.eq_ignore_ascii_case("ogg") || ext.eq_ignore_ascii_case("wav")
+        })
+}
+
+fn is_read_only(path: &Path) -> bool {
+    std::fs::metadata(path)
+        .map(|m| m.permissions().readonly())
+        .unwrap_or(true)
+}
+
+/// Whether the deployed file already has the shape [`place`] would give it: an
+/// inode-identical hardlink for ordinary files, or a writable (non-hardlinked)
+/// copy for the ones the game rewrites. Content equality alone is not enough —
+/// before `.ogg`/`.wav` became writable copies, existing installs held 0444
+/// hardlinks, and a plain re-realize skipped them as "unchanged", so the audio
+/// EACCES survived the fix.
+fn placement_matches(src: &Path, dst: &Path, writable_copy: bool) -> bool {
+    if !dst.exists() {
+        return false;
+    }
+    if writable_copy {
+        !same_inode(src, dst) && !is_read_only(dst)
+    } else {
+        same_inode(src, dst)
+    }
+}
+
 fn place(src: &Path, dst: &Path) -> Result<()> {
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent).ctx(parent)?;
@@ -740,16 +775,7 @@ fn place(src: &Path, dst: &Path) -> Result<()> {
     if dst.exists() {
         std::fs::remove_file(dst).ctx(dst)?;
     }
-    // Per-mod `config.json` files (e.g. SMAPI/Stardew mods) are rewritten by
-    // the game at startup, and MonoGame/FNA audio loaders can fail with EACCES
-    // on read-only `.ogg`/`.wav` hardlinks; copy them writable instead of
-    // hardlinking from the read-only store so the store stays immutable.
-    let copy_writable = dst
-        .file_name()
-        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
-        || dst.extension().is_some_and(|ext| {
-            ext.eq_ignore_ascii_case("ogg") || ext.eq_ignore_ascii_case("wav")
-        });
+    let copy_writable = needs_writable_copy(dst);
     if copy_writable || std::fs::hard_link(src, dst).is_err() {
         std::fs::copy(src, dst).ctx(dst)?;
         if copy_writable {
@@ -839,7 +865,10 @@ pub fn realize(repo: &Repo, plan: &Plan, fresh: bool) -> Result<RealizeReport> {
         let src_md5 = md5_file(src)?;
         let current = state.files.get(k);
         if let Some(cur) = current {
-            if cur.md5 == src_md5 && dst.exists() && same_inode(src, &dst) {
+            // Same bytes AND the right placement (hardlink vs writable copy).
+            // A pure md5+inode check would keep a stale 0444 hardlink of a file
+            // that now has to be a writable copy.
+            if cur.md5 == src_md5 && placement_matches(src, &dst, needs_writable_copy(&dst)) {
                 continue;
             }
         }
@@ -1002,8 +1031,9 @@ fn prune_empty_dirs(base: &Path) {
 mod tests {
     use super::WantSet;
     use super::{
-        force_remove_dir_all, mount_park, mount_path, prune_empty_dirs, resolve_root_path,
-        set_read_only, unmount_path, write_configs,
+        force_remove_dir_all, mount_park, mount_path, needs_writable_copy, place,
+        placement_matches, prune_empty_dirs, resolve_root_path, set_read_only, unmount_path,
+        write_configs,
     };
     use crate::plan::{ConfigFile, ResolvedRoot};
     use std::path::PathBuf;
@@ -1027,6 +1057,49 @@ mod tests {
         // A genuinely different file is kept alongside.
         w.insert("data:Foo.esp".into(), (PathBuf::from("/c"), "x".into()));
         assert_eq!(w.map.len(), 2);
+    }
+
+    #[test]
+    fn writable_copy_files_are_placed_as_writable_copies() {
+        // SMAPI's config.json and MonoGame's .ogg/.wav must never be 0444
+        // hardlinks into the read-only store; an existing hardlink is stale even
+        // when its bytes match, so a re-realize has to replace it.
+        let base = std::env::temp_dir().join(format!("cg-writable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let src = base.join("store/mods/level_up.ogg");
+        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
+        std::fs::write(&src, b"audio").unwrap();
+        set_read_only(&src).unwrap();
+
+        let dst = base.join("instance/Mods/UI/level_up.ogg");
+        place(&src, &dst).unwrap();
+        assert!(
+            !std::fs::metadata(&dst).unwrap().permissions().readonly(),
+            "deployed audio is writable"
+        );
+        assert!(
+            placement_matches(&src, &dst, true),
+            "writable copy accepted"
+        );
+
+        // A 0444 hardlink (what older versions deployed) is not acceptable for
+        // these files, even though it is the right shape for ordinary ones.
+        let linked = base.join("instance/Mods/UI/buff_expire.ogg");
+        std::fs::hard_link(&src, &linked).unwrap();
+        assert!(!placement_matches(&src, &linked, true));
+        assert!(placement_matches(&src, &linked, false));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn needs_writable_copy_matches_config_and_audio_only() {
+        assert!(needs_writable_copy(std::path::Path::new("/x/config.json")));
+        assert!(needs_writable_copy(std::path::Path::new("/x/CONFIG.JSON")));
+        assert!(needs_writable_copy(std::path::Path::new("/x/a.ogg")));
+        assert!(needs_writable_copy(std::path::Path::new("/x/a.WAV")));
+        assert!(!needs_writable_copy(std::path::Path::new("/x/a.xnb")));
+        assert!(!needs_writable_copy(std::path::Path::new("/x/config.json.bak")));
     }
 
     #[test]
