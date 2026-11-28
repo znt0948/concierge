@@ -733,13 +733,19 @@ pub fn mod_fomod_config(
     Ok(Some(cfg))
 }
 
+/// Files the game itself rewrites at runtime. A hash change after playing is
+/// expected, not drift, and re-deploying must not clobber the user's settings.
+pub fn is_runtime_mutable(dst: &Path) -> bool {
+    dst.file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
+}
+
 /// Files that must be deployed as a writable copy rather than a hardlink into
 /// the read-only store: per-mod `config.json` (SMAPI/Stardew mods rewrite it at
 /// startup) and `.ogg`/`.wav` (MonoGame/FNA's audio loader opens them
 /// read-write and fails with EACCES on a 0444 hardlink).
 fn needs_writable_copy(dst: &Path) -> bool {
-    dst.file_name()
-        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
+    is_runtime_mutable(dst)
         || dst
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("ogg") || ext.eq_ignore_ascii_case("wav"))

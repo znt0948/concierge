@@ -148,7 +148,9 @@ set -euo pipefail
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 cd /home/deck/concierge-test/stardew-full-instance
-exec ./StardewModdingAPI "$@"
+# Steam substitutes %command% with its runtime launch chain; SMAPI must not
+# receive those words as arguments.
+exec ./StardewModdingAPI
 ```
 
 and `LaunchOptions` for `413150` is:
@@ -178,7 +180,7 @@ Fluorine launcher still opens.
 | `Error loading sound: ... is denied` | Same, for `.ogg`/`.wav`. | Same. |
 | `unparseable-manifest` for many mods | BOM/CRLF manifests, fixed in this fork's linter. | Rebuild with a current `v0.12.1-wopr.*` binary. |
 | Game exits slowly / Steam hangs in "running" | Wrapper exported a `SteamAppId` that does not match the launching entry. | Remove the export; let Steam provide the environment. |
-| `doctor` reports `no drift` FAIL after playing | The game wrote into the instance (config/saves outside the owned set). | Expected for files the game owns; `realize` restores owned files. Saves live in `~/.config/StardewValley`, not the instance. |
+| `doctor` reports `no drift` FAIL after playing | The game wrote `config.json` files (SMAPI saves settings). | Since `v0.12.1-wopr.6` runtime-mutable `config.json` is excluded from drift; other modifications are still reported. Saves live in `~/.config/StardewValley`, not the instance. |
 
 ## Upgrading the binary
 

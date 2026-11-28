@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{Error, IoCtx, Result};
 use crate::plan::Plan;
-use crate::realize::target_root;
+use crate::realize::{is_runtime_mutable, target_root};
 use crate::repo::{md5_file, Repo};
 use crate::state::{parse_key, Realized};
 
@@ -37,6 +37,11 @@ pub fn check(repo: &Repo, plan: &Plan, vanilla: bool) -> Result<Vec<Drift>> {
             continue;
         };
         let dst = target_root(plan, root)?.join(rel);
+        // SMAPI mods save `config.json` at runtime: its content is the user's
+        // settings, not a deployment defect.
+        if is_runtime_mutable(&dst) {
+            continue;
+        }
         if !dst.exists() {
             drift.push(Drift::Missing {
                 key: k.clone(),
