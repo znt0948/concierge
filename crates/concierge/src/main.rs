@@ -920,9 +920,7 @@ fn run() -> Result<()> {
             }
         }
         Cmd::I18n { lang } => {
-            if plan.game.kind != "stardew" {
-                println!("i18n check is currently supported for stardew (SMAPI) profiles.");
-            } else {
+            if plan.game.kind == "stardew" {
                 let rep = concierge_lint::stardew::i18n_report(&plan, &lang)?;
                 println!(
                     "i18n ({}): {} full, {} partial (missing keys), {} missing {}.json",
@@ -947,6 +945,8 @@ fn run() -> Result<()> {
                         println!("  {} — {} keys", e.mod_dir, e.total_keys);
                     }
                 }
+            } else {
+                println!("i18n check is currently supported for stardew (SMAPI) profiles.");
             }
         }
         Cmd::Doctor => {
