@@ -7,8 +7,8 @@ upstream behaviour unless noted.
 
 Everything below is the state of the reference machine (`wopr`, `deck` user).
 
-**Status (2026-11-28):** live. `concierge-cli v0.12.1-wopr.5` is installed, the
-profile is realized (197 mods, `doctor` clear), native Steam AppID `413150`
+**Status (2026-11-28):** live. `concierge-cli v0.12.1-wopr.8` is installed, the
+profile is realized (200 mods, `doctor` clear), native Steam AppID `413150`
 launches the instance, and the temporary non-Steam test shortcut has been
 removed. The Fluorine/MO2 instance is untouched and remains the rollback path.
 
