@@ -75,8 +75,7 @@ fn scan_i18n_dir(mods: &Path, lang: &str) -> I18nReport {
         let mod_dir = dir
             .parent()
             .and_then(|p| p.strip_prefix(mods).ok())
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "<mod>".to_owned());
+            .map_or_else(|| "<mod>".to_owned(), |p| p.to_string_lossy().into_owned());
 
         let lang_path = dir.join(&lang_file_name);
         if !lang_path.is_file() {
@@ -109,12 +108,8 @@ fn scan_i18n_dir(mods: &Path, lang: &str) -> I18nReport {
             });
         }
     }
-    report
-        .missing
-        .sort_by(|a, b| b.total_keys.cmp(&a.total_keys));
-    report
-        .partial
-        .sort_by(|a, b| b.missing_keys.cmp(&a.missing_keys));
+    report.missing.sort_by_key(|b| std::cmp::Reverse(b.total_keys));
+    report.partial.sort_by_key(|b| std::cmp::Reverse(b.missing_keys));
     report
 }
 
@@ -272,7 +267,7 @@ fn parse_lenient(s: &str) -> Option<Value> {
     }
     // Strip trailing commas before `}` or `]` across any whitespace/CRLF.
     let mut out = String::with_capacity(cleaned.len());
-    let mut iter = cleaned.chars().peekable();
+    let mut iter = cleaned.chars();
     let mut in_str2 = false;
     while let Some(c) = iter.next() {
         if in_str2 {
@@ -290,7 +285,7 @@ fn parse_lenient(s: &str) -> Option<Value> {
             in_str2 = true;
             out.push(c);
         } else if c == ',' {
-            let mut lookahead = iter.clone();
+            let mut lookahead = iter.clone().peekable();
             let mut trailing = false;
             while let Some(&next_c) = lookahead.peek() {
                 if next_c.is_whitespace() {
