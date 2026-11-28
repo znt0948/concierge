@@ -108,8 +108,12 @@ fn scan_i18n_dir(mods: &Path, lang: &str) -> I18nReport {
             });
         }
     }
-    report.missing.sort_by_key(|b| std::cmp::Reverse(b.total_keys));
-    report.partial.sort_by_key(|b| std::cmp::Reverse(b.missing_keys));
+    report
+        .missing
+        .sort_by_key(|b| std::cmp::Reverse(b.total_keys));
+    report
+        .partial
+        .sort_by_key(|b| std::cmp::Reverse(b.missing_keys));
     report
 }
 
