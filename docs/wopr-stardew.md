@@ -171,6 +171,29 @@ value made Steam's process tracking hang on exit.
 Rollback: restore the backed-up launch options, restart Steam, verify the
 Fluorine launcher still opens.
 
+## Translation packs (overlay mods)
+
+Most Stardew translations ship as an overlay: a mod whose files live under
+`<target mod folder>/i18n/zh.json` (sometimes also `<target>/Data/*.json`) and
+are merged into the target mod. MO2 does that merge in its VFS; Concierge
+deploys literal paths, so the overlay only works when `<target>` is exactly the
+deployed folder path.
+
+A mod update can change that layout (a Nexus zip that roots the mod at
+`Trolley Expansion/` while the imported copy and its translation used `[CP] TE`),
+and then the overlay files land outside any mod folder. SMAPI reports them as
+"contains files, but none of them are manifest.json" - they are **not** junk;
+deleting them drops the translation. Fix by repackaging the translation archive
+with the new prefix, repinning its `md5` in `manifest.toml`, then `realize`:
+
+- 2026-11-28 example: `[CP] TE/*` -> `Trolley Expansion/[CP] TE/*`
+  (`Trolley_translation_prefixed.zip`, md5 `9a43964e...`) and
+  `Lots of Kisses/*` -> `LotsOfKisses/*`
+  (`LotsOfKisses_translation_prefixed.zip`, md5 `35fd93a2...`).
+- Before rewriting a pack that carries `Data/*.json`, verify its JSON key
+  structure matches the installed mod (a stale translation would delete newer
+  content). `i18n --lang zh` then confirms the keys are found.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
